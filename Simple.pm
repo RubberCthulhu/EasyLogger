@@ -16,9 +16,12 @@ sub new {
     
     return undef unless defined $path;
     $self->{Path} = $path;
-    return undef unless open($self->{Out}, '>>', $self->{Path});
+    my $mode = exists $opts{Rewrite} && $opts{Rewrite} ? '>' : '>>';
+    return undef unless open($self->{Out}, $mode, $self->{Path});
     $self->{Lock} = exists $opts{Lock} ? $opts{Lock} : undef;
-    $self->{DateTime} = exists $opts{DateTime} && $opts{DateTime} ? 1 : 0;
+    $self->{DateTime} = exists $opts{DateTime} && !$opts{DateTime} ? 0 : 1;
+    $self->{StdOut} =  exists $opts{StdOut} && $opts{StdOut} ? 1 : 0;
+    $self->{StdErr} =  exists $opts{StdErr} && $opts{StdErr} ? 1 : 0;
     
     bless($self, $class);
     return $self;
@@ -33,7 +36,10 @@ sub msg {
     my ($self, $msg) = @_;
     
     $self->lock();
-    print {$self->{Out}} ($self->{DateTime} ? scalar(localtime()) : "").$msg."\n";
+    my $text = ($self->{DateTime} ? scalar(localtime())."\t" : "").$msg."\n";
+    print {$self->{Out}} $text;
+    print STDOUT $text if $self->{StdOut};
+    print STDERR $text if $self->{StdErr};
     $self->unlock();
 }
 
