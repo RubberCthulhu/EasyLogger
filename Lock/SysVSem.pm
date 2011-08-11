@@ -16,7 +16,7 @@ our $VERSION = "0.1";
 use constant MAX_TRIES => 10;
 
 sub new {
-    my ($class, $path, $id, $count, $n) = shift;
+    my ($class, $path, $id, $count, $n) = @_;
     $class = ref($class) || $class;
     
     my $self = $class->SUPER::new() or return undef;
@@ -36,16 +36,18 @@ sub new {
         $self->{SemNum} = 0 unless defined $n;
         my $key;
         if( defined $id ) {
-            $key = IPC::SysV::ftok($path, $id);
+            $key = ftok($path, $id);
         }
         else {
-            $key = IPC::SysV::ftok($path);
+            $key = ftok($path);
         }
+        
         $self->{SemSet} = IPC::Semaphore->new(
             $key,
             $self->{SemCount},
             S_IRUSR|S_IWUSR|IPC_CREAT|IPC_EXCL
         );
+        
         unless( defined $self->{SemSet} ) {
             if( $!{EEXIST} ) {
                 $self->{SemSet} = IPC::Semaphore->new(
@@ -63,8 +65,11 @@ sub new {
                         sleep(1);
                     }
                 }
-                
+                return undef if $loop;
             }
+        }
+        else {
+            $self->{SemSet}->setall(1);
         }
     }
     
