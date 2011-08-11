@@ -13,6 +13,8 @@ use EasyLogger::Lock;
 our @ISA = qw(EasyLogger::Lock Exporter);
 our $VERSION = "0.1";
 
+use constant MAX_TRIES => 10;
+
 sub new {
     my ($class, $path, $id, $count, $n) = shift;
     $class = ref($class) || $class;
@@ -48,7 +50,7 @@ sub new {
             if( $!{EEXIST} ) {
                 $self->{SemSet} = IPC::Semaphore->new(
                     $key,
-                    $self->{SemCount}
+                    $self->{SemCount},
                     S_IRUSR|S_IWUSR
                 ) or return undef;
                 my $loop = 1;
@@ -71,6 +73,7 @@ sub new {
 
 sub DESTROY {
     my $self = shift;
+    $self->SUPER::DESTROY() if $self->can('SUPER::DESTROY');
 }
 
 sub free {

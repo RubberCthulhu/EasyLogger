@@ -15,21 +15,50 @@ sub new {
     $class = ref($class) || $class;
     
     return undef unless defined $path;
-    $self->{Path} = $path;
-    my $mode = exists $opts{Rewrite} && $opts{Rewrite} ? '>' : '>>';
-    return undef unless open($self->{Out}, $mode, $self->{Path});
+    
+    $self->{Path} = '';
+    $self->{Out} = undef;
+    $self->{IsOpen} = undef;
     $self->{Lock} = exists $opts{Lock} ? $opts{Lock} : undef;
     $self->{DateTime} = exists $opts{DateTime} && !$opts{DateTime} ? 0 : 1;
     $self->{StdOut} =  exists $opts{StdOut} && $opts{StdOut} ? 1 : 0;
     $self->{StdErr} =  exists $opts{StdErr} && $opts{StdErr} ? 1 : 0;
-    
+    $self->{Rewrite} = exists $opts{Rewrite} && $opts{Rewrite} ? 1 : 0;
     bless($self, $class);
+    return undef unless $self->init_output($path);
+    
     return $self;
 }
 
 sub DESTROY {
     my $self = shift;
-    close($self->{Out});
+    $self->close_output();
+}
+
+sub init_output {
+    my ($self, $path, $mode) = @_;my $fd;
+    
+    $mode = ( $self->{Rewrite} ? '>' : '>>' ) unless defined $mode;
+    $self->close_output();
+    return undef unless open($self->{Out}, $mode, $path);
+    $self->{Path} = $path;
+    $self->{IsOpen} = 1;
+    
+    return 1;
+}
+
+sub close_output {
+    my ($self) = @_;
+    
+    close($self->{Out}) if defined $self->{Out};
+    $self->{Out} = undef;
+    $self->{IsOpen} = undef;
+}
+
+sub is_open {
+    my ($self) = @_;
+    
+    return $self->{IsOpen};
 }
 
 sub msg {
@@ -41,6 +70,8 @@ sub msg {
     print STDOUT $text if $self->{StdOut};
     print STDERR $text if $self->{StdErr};
     $self->unlock();
+    
+    return 1;
 }
 
 sub lock {
