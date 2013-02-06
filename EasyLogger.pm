@@ -7,9 +7,10 @@ use warnings;
 require Exporter;
 use Carp;
 use IO::Handle;
+use DateTime;
 
 our @ISA = qw(Exporter);
-our $VERSION = "0.3";
+our $VERSION = "0.5";
 our @EXPORT = qw();
 our @EXPORT_OK = qw();
 
@@ -47,6 +48,17 @@ our %LEVEL_PREFIX = (
 
 our $PREFIX_LENGTH = 7;
 
+our %ROTATE_TYPES = (
+    'const'    => 1,
+    'minutely' => 2,
+    'hourly'   => 3,
+    'daily'    => 4,
+    'monthly'  => 5,
+    'yearly'   => 6,
+);
+
+our $DEFAULT_ROTATE = 'const';
+
 sub new {
     my ($class, $path, %opt) = @_;
     $class = ref($class) || $class;
@@ -55,7 +67,8 @@ sub new {
     
     my $self = bless({} => $class);
     
-    $self->{Path} = '';
+    $self->{Path} = undef;
+    $self->{ConstPath} = $path;
     $self->{Out} = undef;
     $self->{IsOpen} = undef;
     $self->{DateTime} = exists $opt{DateTime} && !$opt{DateTime} ? 0 : 1;
@@ -63,8 +76,14 @@ sub new {
     $self->{StdErr} =  exists $opt{StdErr} && $opt{StdErr} ? 1 : 0;
     $self->{Rewrite} = exists $opt{Rewrite} && $opt{Rewrite} ? 1 : 0;
     
-    $self->{ChangePathFunc} = exists $opt{ChangePathFunc} ? $opt{ChangePathFunc} : undef;
-    $self->{ChangePathFuncUserdata} = $opt{ChangePathFuncUserdata};
+    if( exists $opt{Rotate} ) {
+	croak "Unknown rotate type '$opt{Rotate}'\n" unless exists $ROTATE_TYPES{$opt{Rotate}};
+	$self->{Rotate} = $opt{Rotate};
+    }
+    else {
+	$self->{Rotate} = $DEFAULT_ROTATE;
+    }
+    $self->{RotateTm} = undef;
     
     if( exists $opt{Level} ) {
         $self->level($opt{Level});
@@ -73,8 +92,9 @@ sub new {
         $self->{Level} = $DEFAULT_LEVEL;
     }
     
-    return undef unless $self->init_output($path);
-    $self->{Out}->autoflush(1);
+    $self->update_path;
+    return undef unless $self->init_output($self->{Path});
+    #$self->{Out}->autoflush(1);
     
     return $self;
 }
@@ -82,6 +102,56 @@ sub new {
 sub DESTROY {
     my $self = shift;
     $self->close_output();
+}
+
+sub update_path {
+    my ($self, $tm) = @_;
+    
+    $tm = time unless $tm;
+    
+    if( $self->{Rotate} eq 'const' ) {
+	unless( $self->{Path} ) {
+	    $self->{Path} = $self->{ConstPath};
+	    return 1;
+	}
+    }
+    else {
+	if( !defined $self->{RotateTm} or $self->{RotateTm} <= $tm ) {
+	    my $d = DateTime->from_epoch(epoch => $tm, time_zone => 'local');
+	    if( $self->{Rotate} eq 'minutely' ) {
+		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d%.2d-%.2d%.2d", 
+		    $d->year, $d->month, $d->day, $d->hour, $d->minute);
+		$self->{RotateTm} = $d->add(minutes => 1)->truncate(to => 'minute')->epoch;
+	    }
+	    elsif( $self->{Rotate} eq 'hourly' ) {
+		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d%.2d-%.2d", 
+		    $d->year, $d->month, $d->day, $d->hour);
+		$self->{RotateTm} = $d->add(hours => 1)->truncate(to => 'hour')->epoch;
+	    }
+	    elsif( $self->{Rotate} eq 'daily' ) {
+		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d%.2d", 
+		    $d->year, $d->month, $d->day);
+		$self->{RotateTm} = $d->add(day => 1)->truncate(to => 'day')->epoch;
+	    }
+	    elsif( $self->{Rotate} eq 'monthly' ) {
+		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d", 
+		    $d->year, $d->month);
+		$self->{RotateTm} = $d->add(month => 1)->truncate(to => 'month')->epoch;
+	    }
+	    elsif( $self->{Rotate} eq 'yearly' ) {
+		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d", 
+		    $d->year);
+		$self->{RotateTm} = $d->add(years => 1)->truncate(to => 'year')->epoch;
+	    }
+	    else {
+		croak "update_path(): unknown rotate type: '$self->{Rotate}'\n";
+	    }
+	    
+	    return 1;
+	}
+    }
+    
+    return 0;
 }
 
 sub init_output {
@@ -92,6 +162,7 @@ sub init_output {
     return undef unless open($self->{Out}, $mode, $path);
     $self->{Path} = $path;
     $self->{IsOpen} = 1;
+    $self->{Out}->autoflush(1);
     
     return 1;
 }
@@ -107,13 +178,9 @@ sub close_output {
 sub change_output {
     my ($self) = @_;
     
-    if( defined $self->{ChangePathFunc} ) {
-        my ($new_path, $userdata) = $self->{ChangePathFunc}->($self->{Path}, $self->{ChangePathFuncUserdata});
-        if( $new_path ) {
-            $self->close_output;
-            $self->init_output($new_path);
-        }
-        $self->{ChangePathFuncUserdata} = $userdata;
+    if( $self->update_path ) {
+	$self->close_output;
+	$self->init_output($self->{Path});
     }
 }
 
