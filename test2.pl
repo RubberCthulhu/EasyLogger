@@ -8,7 +8,6 @@ my $log = new EasyLogger(
     'test.log',
     Level => 'debug',
     StdOut => 1,
-    Rewrite => 1,
     Rotate => 'minutely',
 );
 

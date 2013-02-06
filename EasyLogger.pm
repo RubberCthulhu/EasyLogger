@@ -131,12 +131,12 @@ sub update_path {
 	    elsif( $self->{Rotate} eq 'daily' ) {
 		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d%.2d", 
 		    $d->year, $d->month, $d->day);
-		$self->{RotateTm} = $d->add(day => 1)->truncate(to => 'day')->epoch;
+		$self->{RotateTm} = $d->add(days => 1)->truncate(to => 'day')->epoch;
 	    }
 	    elsif( $self->{Rotate} eq 'monthly' ) {
 		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d%.2d", 
 		    $d->year, $d->month);
-		$self->{RotateTm} = $d->add(month => 1)->truncate(to => 'month')->epoch;
+		$self->{RotateTm} = $d->add(months => 1)->truncate(to => 'month')->epoch;
 	    }
 	    elsif( $self->{Rotate} eq 'yearly' ) {
 		$self->{Path} = $self->{ConstPath}.sprintf("-%.4d", 
